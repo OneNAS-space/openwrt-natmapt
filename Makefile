@@ -24,7 +24,7 @@ else
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/heiher/natmap.git
 PKG_SOURCE_VERSION:=$(PKG_UPSTREAM_GITHASH)
-PKG_MIRROR_HASH:=a96476d34e978b2a0e2e51e89f3aeafad3dc81aac0828dbf3cff9bb1815f21a5
+PKG_MIRROR_HASH:=d1baa9250ce52cb9f0cac05508705ed4fc14a14a0dbece648a1002f9a95d594b
 
 PKG_SOURCE:=$(PKG_SOURCE_SUBDIR)-$(PKG_SOURCE_VERSION).tar.gz
 endif
@@ -86,7 +86,7 @@ define Package/natmapt-scripts/Default
 	CATEGORY:=Network
 	TITLE:=NATMap $(1) scripts ($(2))
 	DEPENDS:=+natmapt
-	PROVIDES:=@natmapt-$(1)-scripts-$(2)
+	PROVIDES:=@natmapt-$(1)-scripts @natmapt-$(1)-script-$(2)
 	VERSION:=$(SCRIPTS_VERSION)
 	PKGARCH:=all
 endef

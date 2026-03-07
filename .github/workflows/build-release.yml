@@ -156,7 +156,7 @@ jobs:
           set -euo pipefail
           mkdir -p "artifact-arch" "artifact-common"
 
-          find bin/packages -type f \( -name "*.ipk" -o -name "*.apk" \) | while read -r f; do
+          find bin/packages -type f \( -name "natmap*.ipk" -o -name "natmap*.apk" \) | while read -r f; do
             base=$(basename "$f")
             if [[ "$base" == *"-script-"* ]] || [[ "$base" =~ _all\.ipk$ ]]; then
               echo "📦 Detected Common package: $base"
@@ -237,7 +237,7 @@ jobs:
             dest_root="custom-packages/$ver_dir/$arch"
             mkdir -p "$dest_root"
 
-            find "$dir" -type f \( -name "*.ipk" -o -name "*.apk" \) | while read -r f; do
+            find "$dir" -maxdepth 1 -type f \( -name "natmapt*.ipk" -o -name "natmapt*.apk" \) | while read -r f; do
               base=$(basename "$f")
               if [[ "$base" == *.ipk ]]; then
                 pkgname=$(echo "$base" | sed -E 's/^([^_]+)_.*$/\1/')
@@ -248,7 +248,7 @@ jobs:
 
               elif [[ "$base" == *.apk ]]; then
                 standard_name=$(echo "$base" | sed "s/-$arch//")
-                pkgname=$(echo "$standard_name" | cut -d- -f1)
+                pkgname=$(echo "$standard_name" | cut -d- -f1-3)
                 
                 rm -f "$dest_root/${pkgname}"*.apk
                 cp -a "$f" "$dest_root/$standard_name"

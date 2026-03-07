@@ -148,7 +148,10 @@ jobs:
       - name: 📦 Prepare and Rename APK artifacts
         run: |
           find bin/packages/ -name "*.apk" | while read -r f; do
-            mv "$f" "${f%.apk}-${{ matrix.target }}.apk"
+            base=$(basename "$f")
+            if [[ "$base" != *"-script-"* ]]; then
+              mv "$f" "${f%.apk}-${{ matrix.target }}.apk"
+            fi
           done
 
       - name: 🧹 Collect arch and common artifacts

@@ -86,6 +86,15 @@ jobs:
           - version: openwrt-24.10
             target: arm_cortex-a7_neon-vfpv4
             index: 2
+          - version: openwrt-25.12
+            target: x86_64
+            index: 3
+          - version: openwrt-25.12
+            target: aarch64_cortex-a53
+            index: 4
+          - version: openwrt-25.12
+            target: arm_cortex-a7_neon-vfpv4
+            index: 5
 
     steps:
       - name: 🧾 Checkout repo
@@ -95,6 +104,7 @@ jobs:
         run: |
           PKG_NAME=$(grep -E '^PKG_NAME[:?]?=' Makefile | head -n1 | sed -E 's/PKG_NAME[:?]?= *//')
           echo "PKG_NAME=$PKG_NAME" >> "$GITHUB_ENV"
+          echo "ARCH=${{ matrix.target }}-${{ matrix.version }}" >> "$GITHUB_ENV"
 
       - name: 🧰 Set up openwrt-netmapt feed structure
         run: |
@@ -110,10 +120,6 @@ jobs:
             --exclude='README.md' \
             --exclude='SECURITY.md' \
             ./ feed/jackie264/${PKG_NAME}/
-          
-      - name: 🧮 Compute ARCH
-        run: |
-          echo "ARCH=${{ matrix.target }}-${{ matrix.version }}" >> "$GITHUB_ENV"
 
       - name: 🏗️ Build with OpenWrt SDK
         uses: openwrt/gh-action-sdk@v10
@@ -138,6 +144,12 @@ jobs:
             echo "=== Full packages directory tree ==="
             ls -laR bin/packages/ 2>/dev/null || echo "No packages directory"
           fi
+
+      - name: 📦 Prepare and Rename APK artifacts
+        run: |
+          find bin/packages/ -name "*.apk" | while read -r f; do
+            mv "$f" "${f%.apk}-${{ matrix.target }}.apk"
+          done
 
       - name: 🧹 Collect arch and common artifacts
         run: |
@@ -185,16 +197,18 @@ jobs:
       - name: 🗃️ Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.check.outputs.tag_name }}
-          name: Build-v${{ needs.check.outputs.main_version }}
-          files: ./release-assets/**/natmapt*.ipk
+          tag_name: ${{ needs.check.outputs.main_full_version }}
+          name: Build-v${{ needs.check.outputs.main_full_version }}
+          files: |
+            ./release-assets/**/natmapt*.ipk
+            ./release-assets/**/natmapt*.apk
           draft: false
           prerelease: false
           overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Checkout custom-packages repo
+      - name: 🔑 Checkout custom-packages repo
         uses: actions/checkout@v6
         with:
           repository: OneNAS-space/custom-packages
@@ -206,54 +220,51 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
 
-          find ./release-assets -mindepth 1 -maxdepth 1 -type d -print0 |
-            while IFS= read -r -d '' dir; do
+          find ./release-assets -mindepth 1 -maxdepth 1 -type d | while read -r dir; do
               bn=$(basename "$dir")
+              if [[ "$bn" == *"-24.10" ]]; then
+                ver_dir="24.10"
+              else
+                ver_dir="25.12"
+              fi
+
               if [[ "$bn" =~ -common-openwrt- ]]; then
                 arch="common"
               else
                 arch=$(echo "$bn" | sed -E 's/^natmapt-([^ ]+)-openwrt.*$/\1/')
               fi
 
-              echo "Processing $bn -> arch=$arch"
-              mkdir -p "custom-packages/$arch"
+              echo "📦 Processing Folder: $bn -> Version: $ver_dir, Arch: $arch"
 
-              find "$dir" -maxdepth 1 -type f -name "natmapt*.ipk" -print0 |
-                while IFS= read -r -d '' f; do
+              find "$dir" -type f \( -name "*.ipk" -o -name "*.apk" \) | while read -r f; do
                   base=$(basename "$f")
-                  pkgname=$(echo "$base" | sed -E 's/^([^_]+)_.*$/\1/')
-                  archsuffix=$(echo "$base" | sed -E 's/.*_([^_]+)\.ipk$/\1/')
+                  dest_dir="custom-packages/$ver_dir/$arch"
+                  mkdir -p "$dest_dir"
+                  if [[ "$base" == *.ipk ]]; then
+                    # IPK 处理逻辑：提取包名并清理旧版
+                    pkgname=$(echo "$base" | sed -E 's/^([^_]+)_.*$/\1/')
+                    rm -f "$dest_dir/${pkgname}"*.ipk
+                    cp -a "$f" "$dest_dir/"
+                    echo "  → [IPK] Deployed $base to $dest_dir"
+                    ls -la "$dest_dir/${pkgname}"* || echo "No IPKs found"
 
-                  echo "  → file: $base  pkgname=$pkgname  archsuffix=$archsuffix"
-                  echo "    Searching candidates in custom-packages/$arch (suffix=_${archsuffix}.ipk):"
-                  candidates=$(find "custom-packages/$arch" -maxdepth 1 -type f -name "*_${archsuffix}.ipk" -print)
-
-                  if [ -z "$candidates" ]; then
-                    echo "      (none)"
-                  else
-                    echo "$candidates" | while IFS= read -r cand; do
-                      bn_cand=$(basename "$cand")
-                      if printf '%s\n' "$bn_cand" | grep -Eq "^${pkgname}([_-].+)?_${archsuffix}\.ipk$"; then
-                        echo "      Removing $bn_cand"
-                        rm -f -- "$cand"
-                      else
-                        echo "      Skip (not match) $bn_cand"
-                      fi
-                    done
+                  elif [[ "$base" == *.apk ]]; then
+                    # APK 处理逻辑：还原标准名 (去掉 -arch 后缀)
+                    # 示例: natmapt-2026.02.18-x86_64.apk -> natmapt-2026.02.18.apk
+                    standard_name=$(echo "$base" | sed "s/-$arch//")
+                    pkgname=$(echo "$standard_name" | cut -d- -f1)
+                
+                    rm -f "$dest_dir/${pkgname}"*.apk
+                    cp -a "$f" "$dest_dir/$standard_name"
+                    echo "  → [APK] Deployed $base as $standard_name to $dest_dir"
+                    ls -la "$dest_dir/${pkgname}"* || echo "No APKs found"
                   fi
-
-                  echo "    Copy $base -> custom-packages/$arch/"
-                  cp -a -- "$f" "custom-packages/$arch/"
                 done
             done
 
-          echo "📦 Final package tree:"
-          ls -laR custom-packages
-
-      - name: Update pkg artifacts
+      - name: 🚚 Update pkg artifacts
         run: |
-          mkdir -p custom-packages/common
-
+          set -e
           cd custom-packages
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -261,8 +272,8 @@ jobs:
 
           CHANGED=$(git diff --cached --name-only || true)
 
-          MAIN_CHANGED=$(git status --short | grep -E '.*natmapt_.*\.ipk' || true)
-          SUB_CHANGED=$(git status --short | grep -E '.*natmapt-(client|notify).*_all\.ipk' || true)
+          MAIN_CHANGED=$(git status --short | grep -E '.*natmapt_.*\.ipk|.*natmapt-.*\.apk' || true)
+          SUB_CHANGED=$(git status --short | grep -E '.*natmapt-(client|notify).*_all\.ipk|.*natmapt-(client|notify).*\.apk' || true)
 
           if [ -n "$MAIN_CHANGED" ] && [ -n "$SUB_CHANGED" ]; then
             COMMIT_MSG="Update to v${{ needs.check.outputs.main_full_version }} + scripts v${{ needs.check.outputs.scripts_version }}"
@@ -276,4 +287,8 @@ jobs:
           fi
 
           git commit -m "$COMMIT_MSG" || echo "No changes"
-          git push
+          for i in {1..5}; do
+            git pull --rebase origin main && \
+            git push origin main && break || \
+            (echo "Conflict detected, retrying in 5s..." && sleep 5)
+          done

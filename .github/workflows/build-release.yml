@@ -266,9 +266,16 @@ jobs:
         run: |
           set -e
           cd "$GITHUB_WORKSPACE/custom-packages"
+          echo "📂 --- Physical File Check (25.12/common) ---"
+          # 看看目录里到底躺着几个文件
+          ls -R 25.12/common || echo "Directory 25.12/common does not exist!"
+          
+          # 看看这些文件的 MD5，确认它们是不是真的不一样
+          md5sum 25.12/common/*.apk || echo "No APKs found to checksum"
+          
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A .
+          git add -v .
           echo "📂 --- Git Status Check ---"
           git status --short
           

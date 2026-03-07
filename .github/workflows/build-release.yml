@@ -176,8 +176,8 @@ jobs:
           name: natmapt-${{ matrix.target }}-${{ matrix.version }}
           path: artifact-arch/
 
-      - name: 📦 Upload common artifact (only once)
-        if: ${{ matrix.index == 0 }}
+      - name: 📦 Upload common artifact (only once per target)
+        if: ${{ matrix.target == 'x86_64' }}
         uses: actions/upload-artifact@v7
         with:
           name: natmapt-common-${{ matrix.version }}

@@ -252,8 +252,7 @@ jobs:
 
               elif [[ "$base" == *.apk ]]; then
                 standard_name=$(echo "$base" | sed "s/-$arch//")
-                pkgname=$(echo "$standard_name" | cut -d- -f1-4)
-                
+                pkgname=$(echo "$standard_name" | sed -E 's/-[0-9].*//')
                 rm -f "$dest_root/${pkgname}"*.apk
                 cp -v "$f" "$dest_root/$standard_name"
                 echo "✅ [APK] $base (as $standard_name) -> $dest_root"
@@ -267,10 +266,8 @@ jobs:
           set -e
           cd "$GITHUB_WORKSPACE/custom-packages"
           echo "📂 --- Physical File Check (25.12/common) ---"
-          # 看看目录里到底躺着几个文件
           ls -R 25.12/common || echo "Directory 25.12/common does not exist!"
           
-          # 看看这些文件的 MD5，确认它们是不是真的不一样
           md5sum 25.12/common/*.apk || echo "No APKs found to checksum"
           
           git config user.name "github-actions[bot]"
@@ -279,7 +276,6 @@ jobs:
           echo "📂 --- Git Status Check ---"
           git status --short
           
-          # 直接用 git status 的结果来判断，不需要再用 grep 复杂过滤
           CHANGES=$(git status --short)
           
           if [ -z "$CHANGES" ]; then

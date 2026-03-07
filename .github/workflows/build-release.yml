@@ -154,15 +154,16 @@ jobs:
       - name: 🧹 Collect arch and common artifacts
         run: |
           set -euo pipefail
-          target="${{ matrix.target }}"
-          mkdir -p "artifact-arch/${target}" "artifact-common"
+          mkdir -p "artifact-arch" "artifact-common"
 
-          find bin/packages -type f -name "*.ipk" | while read -r f; do
+          find bin/packages -type f \( -name "*.ipk" -o -name "*.apk" \) | while read -r f; do
             base=$(basename "$f")
-            if [[ "$base" =~ _all\.ipk$ ]]; then
-              cp -a "$f" "artifact-common/$base"
+            if [[ "$base" == *"-script-"* ]] || [[ "$base" =~ _all\.ipk$ ]]; then
+              echo "📦 Detected Common package: $base"
+              cp -a "$f" "artifact-common/"
             else
-              cp -a "$f" "artifact-arch/${target}/$base"
+              echo "🏗️ Detected Arch package: $base"
+              cp -a "$f" "artifact-arch/"
             fi
           done
 
@@ -170,7 +171,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: natmapt-${{ matrix.target }}-${{ matrix.version }}
-          path: artifact-arch/${{ matrix.target }}/
+          path: artifact-arch/
 
       - name: 📦 Upload common artifact (only once)
         if: ${{ matrix.index == 0 }}
@@ -215,52 +216,47 @@ jobs:
           token: ${{ secrets.CUSTOM_PACKAGES_TOKEN }}
           path: custom-packages
 
-      - name: 📂 Copy artifacts into repo (robust clean)
+      - name: 📂 Copy artifacts into repo (Precision Versioning)
         run: |
           set -euo pipefail
-          shopt -s nullglob
 
           find ./release-assets -mindepth 1 -maxdepth 1 -type d | while read -r dir; do
-              bn=$(basename "$dir")
-              if [[ "$bn" == *"-24.10" ]]; then
-                ver_dir="24.10"
-              else
-                ver_dir="25.12"
-              fi
+            bn=$(basename "$dir")
+            if [[ "$bn" == *"-24.10" ]]; then
+              ver_dir="24.10"
+            else
+              ver_dir="25.12"
+            fi
 
-              if [[ "$bn" =~ -common-openwrt- ]]; then
-                arch="common"
-              else
-                arch=$(echo "$bn" | sed -E 's/^natmapt-([^ ]+)-openwrt.*$/\1/')
-              fi
+            if [[ "$bn" == *"common"* ]]; then
+              arch="common"
+            else
+              arch=$(echo "$bn" | sed -E 's/^natmapt-(.+)-openwrt-.*/\1/')
+            fi
 
-              echo "📦 Processing Folder: $bn -> Version: $ver_dir, Arch: $arch"
+            dest_root="custom-packages/$ver_dir/$arch"
+            mkdir -p "$dest_root"
 
-              find "$dir" -type f \( -name "*.ipk" -o -name "*.apk" \) | while read -r f; do
-                  base=$(basename "$f")
-                  dest_dir="custom-packages/$ver_dir/$arch"
-                  mkdir -p "$dest_dir"
-                  if [[ "$base" == *.ipk ]]; then
-                    # IPK 处理逻辑：提取包名并清理旧版
-                    pkgname=$(echo "$base" | sed -E 's/^([^_]+)_.*$/\1/')
-                    rm -f "$dest_dir/${pkgname}"*.ipk
-                    cp -a "$f" "$dest_dir/"
-                    echo "  → [IPK] Deployed $base to $dest_dir"
-                    ls -la "$dest_dir/${pkgname}"* || echo "No IPKs found"
+            find "$dir" -type f \( -name "*.ipk" -o -name "*.apk" \) | while read -r f; do
+              base=$(basename "$f")
+              if [[ "$base" == *.ipk ]]; then
+                pkgname=$(echo "$base" | sed -E 's/^([^_]+)_.*$/\1/')
+                rm -f "$dest_root/${pkgname}"*.ipk
+                cp -a "$f" "$dest_root/"
+                echo "✅ [IPK] $base -> $dest_root"
+                ls -la "$dest_root/${pkgname}"* || echo "No IPKs found"
 
-                  elif [[ "$base" == *.apk ]]; then
-                    # APK 处理逻辑：还原标准名 (去掉 -arch 后缀)
-                    # 示例: natmapt-2026.02.18-x86_64.apk -> natmapt-2026.02.18.apk
-                    standard_name=$(echo "$base" | sed "s/-$arch//")
-                    pkgname=$(echo "$standard_name" | cut -d- -f1)
+              elif [[ "$base" == *.apk ]]; then
+                standard_name=$(echo "$base" | sed "s/-$arch//")
+                pkgname=$(echo "$standard_name" | cut -d- -f1)
                 
-                    rm -f "$dest_dir/${pkgname}"*.apk
-                    cp -a "$f" "$dest_dir/$standard_name"
-                    echo "  → [APK] Deployed $base as $standard_name to $dest_dir"
-                    ls -la "$dest_dir/${pkgname}"* || echo "No APKs found"
-                  fi
-                done
+                rm -f "$dest_root/${pkgname}"*.apk
+                cp -a "$f" "$dest_root/$standard_name"
+                echo "✅ [APK] $base (as $standard_name) -> $dest_root"
+                ls -la "$dest_root/${pkgname}"* || echo "No APKs found"
+              fi
             done
+          done
 
       - name: 🚚 Update pkg artifacts
         run: |
@@ -268,7 +264,7 @@ jobs:
           cd custom-packages
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add .
 
           CHANGED=$(git diff --cached --name-only || true)
 
@@ -282,13 +278,13 @@ jobs:
           elif [ -n "$SUB_CHANGED" ]; then
             COMMIT_MSG="Update to v${{ needs.check.outputs.scripts_version }}"
           else
-            COMMIT_MSG=$(git log -1 --pretty=%B)
-            echo "No updates detected, reusing last commit message: $COMMIT_MSG"
+            COMMIT_MSG="Routine update for natmapt"
           fi
 
           git commit -m "$COMMIT_MSG" || echo "No changes"
           for i in {1..5}; do
+            echo "Attempt $i: Pushing to custom-packages..."
             git pull --rebase origin main && \
-            git push origin main && break || \
-            (echo "Conflict detected, retrying in 5s..." && sleep 5)
+            git push origin main && echo "✅ Push successful!" && break || \
+            (echo "⚠️ Conflict detected, retrying in 5s..." && sleep 5)
           done

@@ -252,7 +252,7 @@ jobs:
 
               elif [[ "$base" == *.apk ]]; then
                 standard_name=$(echo "$base" | sed "s/-$arch//")
-                pkgname=$(echo "$standard_name" | cut -d- -f1-3)
+                pkgname=$(echo "$standard_name" | cut -d- -f1-4)
                 
                 rm -f "$dest_root/${pkgname}"*.apk
                 cp -v "$f" "$dest_root/$standard_name"

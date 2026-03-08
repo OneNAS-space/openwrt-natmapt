@@ -201,7 +201,7 @@ jobs:
       - name: 🗃️ Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.check.outputs.main_full_version }}
+          tag_name: v${{ needs.check.outputs.main_full_version }}
           name: Build-v${{ needs.check.outputs.main_full_version }}
           files: |
             ./release-assets/**/natmapt*.ipk

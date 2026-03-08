@@ -39,7 +39,7 @@ jobs:
         run: |
           PKG_VERSION=$(grep -E '^PKG_UPSTREAM_VERSION *:?=' Makefile | head -n1 | cut -d= -f2 | tr -d '[:space:]')
           PKG_RELEASE=$(grep -E '^PKG_RELEASE *:?=' Makefile | head -n1 | cut -d= -f2 | tr -d '[:space:]')
-          COMBINED_VERSION="${PKG_VERSION}-r${PKG_RELEASE}"
+          COMBINED_VERSION="v${PKG_VERSION}-r${PKG_RELEASE}"
           
           echo "tag_name=v${COMBINED_VERSION}" >> "$GITHUB_OUTPUT"
           echo "main_version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
@@ -52,7 +52,7 @@ jobs:
         id: check_release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: v${{ steps.version.outputs.main_full_version }}
+          TAG: ${{ steps.version.outputs.main_full_version }}
         run: |
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "Manual run detected. Forcing build."
@@ -198,19 +198,33 @@ jobs:
         with:
           path: ./release-assets
 
-      - name: 🗃️ Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ needs.check.outputs.main_full_version }}
-          name: Build-v${{ needs.check.outputs.main_full_version }}
-          files: |
-            ./release-assets/**/natmapt*.ipk
-            ./release-assets/**/natmapt*.apk
-          draft: false
-          prerelease: false
-          overwrite_files: true
+      - name: 🚀 Robust Release (Native GH CLI)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.check.outputs.main_full_version }}
+          TITLE: "Build -${{ needs.check.outputs.main_full_version }}"
+        run: |
+          gh release view "$TAG" || gh release create "$TAG" --title "$TAG" --notes ""
+          echo "Uploading assets to $TAG..."
+          find ./release-assets -type f \( -name "natmapt*.ipk" -o -name "natmapt*.apk" \) | while read -r file; do
+            echo "⬆️ Uploading $(basename "$file")..."
+            gh release upload "$TAG" "$file" --clobber
+          done
+          echo "🎉 All assets uploaded successfully."
+
+#      - name: 🗃️ Create GitHub Release
+#        uses: softprops/action-gh-release@v2
+#        with:
+#          tag_name: v${{ needs.check.outputs.main_full_version }}
+#          name: Build-v${{ needs.check.outputs.main_full_version }}
+#          files: |
+#            ./release-assets/**/natmapt*.ipk
+#            ./release-assets/**/natmapt*.apk
+#          draft: false
+#          prerelease: false
+#          overwrite_files: true
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 🔑 Checkout custom-packages repo
         uses: actions/checkout@v6
@@ -284,11 +298,11 @@ jobs:
           fi
 
           if [[ "$CHANGES" == *"-script-"* ]] && [[ "$CHANGES" =~ (natmapt_.*ipk|natmapt-.*apk) ]]; then
-            COMMIT_MSG="Update to v${{ needs.check.outputs.main_full_version }} + scripts v${{ needs.check.outputs.scripts_version }}"
+            COMMIT_MSG="Update to ${{ needs.check.outputs.main_full_version }} + scripts v${{ needs.check.outputs.scripts_version }}"
           elif [[ "$CHANGES" == *"-script-"* ]]; then
             COMMIT_MSG="Update scripts to v${{ needs.check.outputs.scripts_version }}"
           else
-            COMMIT_MSG="Update to v${{ needs.check.outputs.main_full_version }}"
+            COMMIT_MSG="Update to ${{ needs.check.outputs.main_full_version }}"
           fi
 
           git commit -m "$COMMIT_MSG"

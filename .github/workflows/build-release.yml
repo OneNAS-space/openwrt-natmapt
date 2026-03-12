@@ -241,9 +241,9 @@ jobs:
           find ./release-assets -mindepth 1 -maxdepth 1 -type d | while read -r dir; do
             bn=$(basename "$dir")
             if [[ "$bn" == *"-24.10" ]]; then
-              ver_dir="24.10"
+              ver_dir="releases/packages-24.10"
             else
-              ver_dir="25.12"
+              ver_dir="releases/packages-25.12"
             fi
 
             if [[ "$bn" == *"common"* ]]; then

@@ -241,18 +241,19 @@ jobs:
           find ./release-assets -mindepth 1 -maxdepth 1 -type d | while read -r dir; do
             bn=$(basename "$dir")
             if [[ "$bn" == *"-24.10" ]]; then
-              ver_dir="releases/packages-24.10"
+              ver="24.10"
             else
-              ver_dir="releases/packages-25.12"
+              ver="25.12"
             fi
 
             if [[ "$bn" == *"common"* ]]; then
               arch="common"
+              dest_root="$TARGET_DIR/releases/packages-$ver/common"
             else
               arch=$(echo "$bn" | sed -E 's/^natmapt-(.+)-openwrt-.*/\1/')
+              dest_root="$TARGET_DIR/releases/packages-$ver/$arch/packages"
             fi
 
-            dest_root="$TARGET_DIR/$ver_dir/$arch"
             mkdir -p "$dest_root"
 
             find "$dir" -maxdepth 1 -type f \( -name "natmapt*.ipk" -o -name "natmapt*.apk" \) | while read -r f; do
@@ -280,9 +281,9 @@ jobs:
           set -e
           cd "$GITHUB_WORKSPACE/custom-packages"
           echo "📂 --- Physical File Check (25.12/common) ---"
-          ls -R 25.12/common || echo "Directory 25.12/common does not exist!"
+          ls -R releases/packages-25.12/common || echo "Directory releases/packages-25.12/common does not exist!"
           
-          md5sum 25.12/common/*.apk || echo "No APKs found to checksum"
+          md5sum releases/packages-25.12/common/*.apk || echo "No APKs found to checksum"
           
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

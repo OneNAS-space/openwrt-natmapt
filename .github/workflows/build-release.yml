@@ -77,15 +77,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - version: openwrt-24.10
-            target: x86_64
-            index: 0
-          - version: openwrt-24.10
-            target: aarch64_cortex-a53
-            index: 1
-          - version: openwrt-24.10
-            target: arm_cortex-a7_neon-vfpv4
-            index: 2
           - version: openwrt-25.12
             target: x86_64
             index: 3
@@ -135,12 +126,12 @@ jobs:
       - name: 🔍 Debug build output
         run: |
           echo "=== Build directory structure ==="
-          find . -name "*.ipk" -type f 2>/dev/null || echo "No .ipk files found"
+          find . -name "*.apk" -type f 2>/dev/null || echo "No .apk files found"
           echo "=== bin directory structure ==="
           ls -la bin/ 2>/dev/null || echo "No bin directory found"
           if [ -d "bin/packages" ]; then
             echo "=== packages directory structure ==="
-            find bin/packages/ -type f -name "*.ipk" 2>/dev/null || echo "No .ipk files in packages directory"
+            find bin/packages/ -type f -name "*.apk" 2>/dev/null || echo "No .apk files in packages directory"
             echo "=== Full packages directory tree ==="
             ls -laR bin/packages/ 2>/dev/null || echo "No packages directory"
           fi
@@ -159,9 +150,9 @@ jobs:
           set -euo pipefail
           mkdir -p "artifact-arch" "artifact-common"
 
-          find bin/packages -type f \( -name "natmap*.ipk" -o -name "natmap*.apk" \) | while read -r f; do
+          find bin/packages -type f -name "natmap*.apk" | while read -r f; do
             base=$(basename "$f")
-            if [[ "$base" == *"-script-"* ]] || [[ "$base" =~ _all\.ipk$ ]]; then
+            if [[ "$base" == *"-script-"* ]]; then
               echo "📦 Detected Common package: $base"
               cp -a "$f" "artifact-common/"
             else
@@ -206,25 +197,11 @@ jobs:
         run: |
           gh release view "$TAG" || gh release create "$TAG" --title "$TAG" --notes ""
           echo "Uploading assets to $TAG..."
-          find ./release-assets -type f \( -name "natmapt*.ipk" -o -name "natmapt*.apk" \) | while read -r file; do
+          find ./release-assets -type f -name "natmapt*.apk" | while read -r file; do
             echo "⬆️ Uploading $(basename "$file")..."
             gh release upload "$TAG" "$file" --clobber
           done
           echo "🎉 All assets uploaded successfully."
-
-#      - name: 🗃️ Create GitHub Release
-#        uses: softprops/action-gh-release@v2
-#        with:
-#          tag_name: v${{ needs.check.outputs.main_full_version }}
-#          name: Build-v${{ needs.check.outputs.main_full_version }}
-#          files: |
-#            ./release-assets/**/natmapt*.ipk
-#            ./release-assets/**/natmapt*.apk
-#          draft: false
-#          prerelease: false
-#          overwrite_files: true
-#        env:
-#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 🔑 Checkout custom-packages repo
         uses: actions/checkout@v6
@@ -237,14 +214,10 @@ jobs:
         run: |
           set -euo pipefail
           TARGET_DIR="$GITHUB_WORKSPACE/custom-packages"
+          ver="25.12"
 
           find ./release-assets -mindepth 1 -maxdepth 1 -type d | while read -r dir; do
             bn=$(basename "$dir")
-            if [[ "$bn" == *"-24.10" ]]; then
-              ver="24.10"
-            else
-              ver="25.12"
-            fi
 
             if [[ "$bn" == *"common"* ]]; then
               arch="common"
@@ -256,23 +229,14 @@ jobs:
 
             mkdir -p "$dest_root"
 
-            find "$dir" -maxdepth 1 -type f \( -name "natmapt*.ipk" -o -name "natmapt*.apk" \) | while read -r f; do
+            find "$dir" -maxdepth 1 -type f -name "natmapt*.apk" | while read -r f; do
               base=$(basename "$f")
-              if [[ "$base" == *.ipk ]]; then
-                pkgname=$(echo "$base" | sed -E 's/^([^_]+)_.*$/\1/')
-                rm -f "$dest_root/${pkgname}"*.ipk
-                cp -a "$f" "$dest_root/"
-                echo "✅ [IPK] $base -> $dest_root"
-                ls -la "$dest_root/${pkgname}"* || echo "No IPKs found"
-
-              elif [[ "$base" == *.apk ]]; then
-                standard_name=$(echo "$base" | sed "s/-$arch//")
-                pkgname=$(echo "$standard_name" | sed -E 's/-[0-9].*//')
-                rm -f "$dest_root/${pkgname}"*.apk
-                cp -v "$f" "$dest_root/$standard_name"
-                echo "✅ [APK] $base (as $standard_name) -> $dest_root"
-                ls -la "$dest_root/${pkgname}"* || echo "No APKs found"
-              fi
+              standard_name=$(echo "$base" | sed "s/-$arch//")
+              pkgname=$(echo "$standard_name" | sed -E 's/-[0-9].*//')
+              rm -f "$dest_root/${pkgname}"*.apk
+              cp -v "$f" "$dest_root/$standard_name"
+              echo "✅ [APK] $base (as $standard_name) -> $dest_root"
+              ls -la "$dest_root/${pkgname}"* || echo "No APKs found"
             done
           done
 
@@ -298,7 +262,7 @@ jobs:
             exit 0
           fi
 
-          if [[ "$CHANGES" == *"-script-"* ]] && [[ "$CHANGES" =~ (natmapt_.*ipk|natmapt-.*apk) ]]; then
+          if [[ "$CHANGES" == *"-script-"* ]] && [[ "$CHANGES" =~ natmapt-.*apk ]]; then
             COMMIT_MSG="Update to ${{ needs.check.outputs.main_full_version }} + scripts v${{ needs.check.outputs.scripts_version }}"
           elif [[ "$CHANGES" == *"-script-"* ]]; then
             COMMIT_MSG="Update scripts to v${{ needs.check.outputs.scripts_version }}"
